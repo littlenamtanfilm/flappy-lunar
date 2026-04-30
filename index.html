@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;min-height:100vh;background:#1a1a2e;display:flex;justify-content:center;align-items:center;font-family:'Press Start 2P',monospace;image-rendering:pixelated;overflow:hidden;}
+
+/* RESPONSIVE WRAPPER — scales the 360px game to fit any screen, centred */
+#scale-wrap{
+  width:360px;
+  flex-shrink:0;
+  transform-origin:center center;
+  position:relative;
+}
+
+#root{width:360px;position:relative;overflow:hidden;}
+.screen{display:none;flex-direction:column;align-items:center;min-height:100vh;}
+.screen.active{display:flex;}
+
+#home{background:#5c94fc;position:relative;overflow:hidden;min-height:100vh;}
+.sky-layer{position:absolute;inset:0;background:#5c94fc;}
+.ground-strip{position:absolute;bottom:0;left:-10px;right:-10px;height:80px;background:url('https://i.ibb.co/SD41NRq1/Lunar-flappy-floorbig.png') repeat-x center/auto 80px;image-rendering:auto;}
+
+.title-wrap{position:relative;z-index:10;margin-top:32px;text-align:center;}
+.title-line1{color:#fff;font-size:18px;display:block;text-shadow:3px 3px 0 #000;}
+.title-line2{color:#f7c75a;font-size:13px;display:block;margin-top:6px;text-shadow:2px 2px 0 #7a5a00;}
+
+.hero-panda{position:relative;z-index:10;width:100px;height:100px;margin-top:10px;animation:float 1.4s ease-in-out infinite;image-rendering:auto;}
+@keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-12px);}}
+
+/* SCOREBOARD */
+.scoreboard{position:relative;z-index:10;margin-top:12px;background:#e8a800;border:4px solid #7a5400;box-shadow:4px 4px 0 #7a5400;padding:10px 16px;color:#fff;font-size:9px;text-shadow:1px 1px 0 #7a5400;text-align:center;width:310px;}
+.scoreboard-title{color:#fff700;font-size:7px;margin-bottom:8px;text-shadow:1px 1px 0 #7a5400;display:flex;align-items:center;justify-content:center;gap:6px;}
+.fb-dot{width:8px;height:8px;border-radius:50%;background:#4caf50;display:inline-block;animation:pulse 1.5s ease infinite;flex-shrink:0;}
+.fb-dot.offline{background:#f44336;animation:none;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+
+/* live badge */
+.live-badge{font-size:6px;background:#e83030;color:#fff;padding:2px 5px;border-radius:2px;margin-left:4px;animation:pulse 1s ease infinite;}
+
+.lb-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:2px solid #7a5400;font-size:7px;transition:background 0.3s;}
+.lb-row:first-child{border-top:none;}
+.lb-row.updated{animation:flash-row 0.6s ease;}
+@keyframes flash-row{0%,100%{background:transparent;}50%{background:rgba(255,255,0,0.2);}}
+.lb-rank{width:24px;color:#fff700;text-align:center;}
+.lb-name{flex:1;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.lb-score{color:#fff700;font-size:8px;}
+.lb-me{color:#fff700 !important;font-size:7px;}
+.lb-empty{color:rgba(255,255,255,0.7);font-size:7px;padding:8px 0;}
+.lb-loading{color:rgba(255,255,255,0.5);font-size:6px;padding:8px 0;animation:blink 1s step-end infinite;}
+
+.btn-play-wrap{position:relative;z-index:10;margin-top:14px;}
+.btn-play{background:#e83030;color:#fff;border:none;font-family:'Press Start 2P',monospace;font-size:11px;padding:14px 28px;cursor:pointer;box-shadow:0 6px 0 #8a0000,4px 4px 0 #000;text-shadow:1px 1px 0 #8a0000;letter-spacing:1px;}
+.btn-play:active{transform:translateY(4px);box-shadow:0 2px 0 #8a0000,4px 4px 0 #000;}
+.hint-text{position:relative;z-index:10;margin-top:10px;font-size:7px;color:#fff;text-shadow:1px 1px 0 #000;animation:blink 1s step-end infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+
+.player-bar{position:relative;z-index:10;display:flex;align-items:center;gap:8px;margin-top:10px;background:rgba(0,0,0,0.28);border:2px solid rgba(255,255,255,0.2);border-radius:3px;padding:7px 12px;width:310px;}
+.player-label{font-size:6px;color:rgba(255,255,255,0.6);}
+.player-name{font-size:7px;color:#fff700;text-shadow:1px 1px 0 #7a5a00;flex:1;}
+.btn-change-name{font-family:'Press Start 2P',monospace;font-size:6px;background:#7a5400;color:#fff700;border:none;padding:5px 8px;cursor:pointer;box-shadow:0 3px 0 #3a2000,2px 2px 0 #000;}
+.btn-change-name:active{transform:translateY(2px);box-shadow:0 1px 0 #3a2000,2px 2px 0 #000;}
+
+.credits{position:absolute;bottom:84px;left:0;right:0;z-index:10;text-align:center;font-size:5px;color:rgba(255,255,255,0.5);text-shadow:1px 1px 0 rgba(0,0,0,0.5);line-height:2.2;}
+.credits a{color:rgba(255,255,255,0.6);text-decoration:none;}
+
+/* GAME */
+#game-screen{padding:0;background:transparent;}
+#canvas{display:block;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;}
+
+#dead-overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:20;}
+#dead-box{background:#e8a800;border:6px solid #7a5400;box-shadow:6px 6px 0 #000;padding:22px 24px;text-align:center;width:300px;}
+.dead-title{font-size:14px;color:#fff;text-shadow:2px 2px 0 #7a5400;margin-bottom:8px;}
+.new-best-tag{font-size:8px;color:#fff700;text-shadow:1px 1px 0 #7a5400;margin-bottom:6px;animation:blink 0.5s step-end infinite;display:none;}
+.dead-scores{display:flex;justify-content:center;gap:24px;margin:10px 0;}
+.dead-s .val{font-size:20px;color:#fff;text-shadow:2px 2px 0 #7a5400;}
+.dead-s .lbl{font-size:7px;color:#fff700;margin-top:4px;text-shadow:1px 1px 0 #7a5400;}
+.dead-btns{display:flex;gap:8px;margin-top:12px;}
+.btn-px{flex:1;font-family:'Press Start 2P',monospace;font-size:7px;padding:10px 4px;cursor:pointer;border:none;text-shadow:1px 1px 0 #000;line-height:1.6;}
+.btn-px.green{background:#5d8a3c;color:#fff;box-shadow:0 4px 0 #2a5a10,3px 3px 0 #000;}
+.btn-px.green:active{transform:translateY(3px);box-shadow:0 1px 0 #2a5a10,3px 3px 0 #000;}
+.btn-px.blue{background:#185fa5;color:#fff;box-shadow:0 4px 0 #0a3060,3px 3px 0 #000;}
+.btn-px.blue:active{transform:translateY(3px);box-shadow:0 1px 0 #0a3060,3px 3px 0 #000;}
+.btn-px.xbtn{background:#000;color:#fff;box-shadow:0 4px 0 #444,3px 3px 0 #000;display:flex;align-items:center;justify-content:center;gap:4px;}
+.btn-px.xbtn:active{transform:translateY(3px);box-shadow:0 1px 0 #444,3px 3px 0 #000;}
+.x-icon{width:12px;height:12px;flex-shrink:0;}
+.btn-home-px{width:100%;margin-top:10px;font-family:'Press Start 2P',monospace;font-size:7px;background:transparent;color:#fff700;border:none;cursor:pointer;text-shadow:1px 1px 0 #7a5400;padding:6px;}
+
+#name-modal{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;z-index:100;}
+#name-box{background:#e8a800;border:6px solid #7a5400;box-shadow:6px 6px 0 #000;padding:24px;text-align:center;width:300px;}
+#name-box h3{font-size:11px;color:#fff;text-shadow:2px 2px 0 #7a5400;margin-bottom:8px;}
+#name-box p{font-size:7px;color:#fff700;margin-bottom:14px;text-shadow:1px 1px 0 #7a5400;line-height:1.8;}
+#name-input{width:100%;background:#fff;border:4px solid #7a5400;padding:10px;color:#333;font-family:'Press Start 2P',monospace;font-size:10px;outline:none;margin-bottom:12px;}
+.btn-save-px{width:100%;background:#e83030;color:#fff;border:none;font-family:'Press Start 2P',monospace;font-size:9px;padding:12px;cursor:pointer;box-shadow:0 4px 0 #8a0000,3px 3px 0 #000;text-shadow:1px 1px 0 #8a0000;}
+.btn-save-px:active{transform:translateY(3px);box-shadow:0 1px 0 #8a0000,3px 3px 0 #000;}
+
+/* SUMMARY CARD */
+#summary-card{
+  background:linear-gradient(160deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%);
+  border:3px solid #f7c75a;
+  margin:8px 0 6px;
+  padding:12px 14px 10px;
+  position:relative;
+  overflow:hidden;
+  box-shadow:inset 0 0 0 1px rgba(255,200,0,0.15);
+}
+/* pixel stars */
+#summary-card::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    radial-gradient(circle,rgba(255,255,255,0.9) 1px,transparent 1px),
+    radial-gradient(circle,rgba(255,255,255,0.6) 1px,transparent 1px),
+    radial-gradient(circle,rgba(255,255,255,0.4) 1px,transparent 1px);
+  background-size:80px 60px,110px 90px,60px 70px;
+  background-position:12px 8px,44px 22px,68px 5px;
+  pointer-events:none;
+}
+.sc-header{display:flex;align-items:center;gap:10px;margin-bottom:8px;position:relative;}
+.sc-panda{width:52px;height:52px;image-rendering:auto;animation:sc-float 1.2s ease-in-out infinite;flex-shrink:0;}
+@keyframes sc-float{0%,100%{transform:translateY(0) rotate(-6deg);}50%{transform:translateY(-5px) rotate(4deg);}}
+.sc-title-col{text-align:left;flex:1;}
+.sc-game{font-size:7px;color:#f7c75a;text-shadow:1px 1px 0 #7a5400;letter-spacing:1px;line-height:1.6;}
+.sc-player{font-size:8px;color:#fff;text-shadow:1px 1px 0 #000;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:160px;}
+.sc-moon-tag{font-size:5px;color:rgba(255,200,80,0.7);letter-spacing:0.5px;margin-top:2px;}
+.sc-divider{height:2px;background:linear-gradient(90deg,transparent,#f7c75a,transparent);margin:6px 0;}
+.sc-stats{display:flex;align-items:stretch;justify-content:center;position:relative;}
+.sc-stat{flex:1;text-align:center;padding:4px 0;}
+.sc-sep{width:1px;background:rgba(247,199,90,0.4);margin:2px 0;flex-shrink:0;}
+.sc-val{font-size:16px;color:#fff700;text-shadow:2px 2px 0 rgba(122,84,0,0.8);line-height:1.2;}
+.sc-lbl{font-size:5px;color:rgba(255,255,255,0.6);margin-top:3px;letter-spacing:0.5px;}
+.sc-footer{font-size:5px;color:rgba(255,200,80,0.45);letter-spacing:0.5px;margin-top:6px;position:relative;}
+
+#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#000;color:#fff;font-family:'Press Start 2P',monospace;font-size:8px;border:3px solid #f7c75a;padding:10px 18px;display:none;z-index:200;white-space:nowrap;}
+</style>
+</head>
+<body>
+<div id="scale-wrap">
+<div id="root">
+
+<div id="home" class="screen active">
+  <div class="sky-layer"></div>
+  <svg style="position:absolute;top:50px;left:20px;width:72px;height:28px;" viewBox="0 0 36 14">
+    <rect x="4" y="8" width="28" height="6" fill="white"/><rect x="8" y="4" width="20" height="6" fill="white"/><rect x="12" y="0" width="12" height="6" fill="white"/>
+  </svg>
+  <svg style="position:absolute;top:90px;right:18px;width:56px;height:22px;" viewBox="0 0 36 14">
+    <rect x="4" y="8" width="28" height="6" fill="white"/><rect x="8" y="4" width="20" height="6" fill="white"/><rect x="12" y="0" width="12" height="6" fill="white"/>
+  </svg>
+  <svg style="position:absolute;top:34px;left:180px;width:44px;height:18px;" viewBox="0 0 36 14">
+    <rect x="4" y="8" width="28" height="6" fill="white"/><rect x="8" y="4" width="20" height="6" fill="white"/><rect x="12" y="0" width="12" height="6" fill="white"/>
+  </svg>
+
+  <div class="title-wrap">
+    <span class="title-line1">FLAPPY LUNAR</span>
+    <span class="title-line2">* TAP TO FLY *</span>
+  </div>
+
+  <img src="https://i.ibb.co/cSkV90ws/lunar-flappy-duck.png" class="hero-panda" crossorigin="anonymous">
+
+  <div class="scoreboard">
+    <div class="scoreboard-title">
+      <span class="fb-dot offline" id="fb-dot"></span>
+      <span id="lb-header">== MY STATS ==</span>
+      <span class="live-badge" id="live-badge" style="display:none">LIVE</span>
+    </div>
+    <div id="lb-list"><div class="lb-loading">CONNECTING...</div></div>
+  </div>
+
+  <div class="btn-play-wrap"><button class="btn-play" id="btn-play">PLAY</button></div>
+  <div class="hint-text">- PRESS SPACE OR TAP -</div>
+
+  <div class="player-bar" id="player-bar" style="display:none">
+    <span class="player-label">PLAYER:</span>
+    <span class="player-name" id="player-name-display"></span>
+    <button class="btn-change-name" id="btn-change-name">✏ CHANGE</button>
+  </div>
+
+  <div style="flex:1;"></div>
+
+  <div class="credits">
+    made by littlebaecon &nbsp;·&nbsp; <a href="https://x.com/littlebaechu_" target="_blank">@littlebaechu_</a><br>
+    artworks by marcy &nbsp;·&nbsp; <a href="https://x.com/awbymarcy" target="_blank">@awbymarcy</a><br>
+  </div>
+
+  <div class="ground-strip"></div>
+</div>
+
+<div id="game-screen" class="screen">
+  <canvas id="canvas" width="360" height="560"></canvas>
+  <div id="dead-overlay">
+    <!-- SUMMARY CARD -->
+    <div id="dead-box">
+      <div class="dead-title">GAME OVER</div>
+      <div class="new-best-tag" id="new-best-tag">🏆 NEW RECORD!</div>
+
+      <!-- card -->
+      <div id="summary-card">
+        <div class="sc-header">
+          <img src="https://i.ibb.co/tp6kpmyF/lunar-flappy-duck2.png" class="sc-panda" crossorigin="anonymous" id="sc-panda-img">
+          <div class="sc-title-col">
+            <div class="sc-game">🐼 FLAPPY LUNAR 🐣</div>
+            <div class="sc-player" id="sc-player">—</div>
+            <div class="sc-moon-tag">✦ flappy-lunar.web.app ✦</div>
+          </div>
+        </div>
+        <div class="sc-divider"></div>
+        <div class="sc-stats">
+          <div class="sc-stat">
+            <div class="sc-val" id="sc-score">0</div>
+            <div class="sc-lbl">SCORE</div>
+          </div>
+          <div class="sc-sep"></div>
+          <div class="sc-stat">
+            <div class="sc-val" id="sc-best">0</div>
+            <div class="sc-lbl">BEST</div>
+          </div>
+          <div class="sc-sep"></div>
+          <div class="sc-stat">
+            <div class="sc-val" id="sc-rank">—</div>
+            <div class="sc-lbl">RANK</div>
+          </div>
+        </div>
+        <div class="sc-divider"></div>
+        <div class="sc-footer">Can you beat me? 🕹️</div>
+      </div>
+
+      <div class="dead-btns">
+        <button class="btn-px green" id="btn-restart">RETRY</button>
+        <button class="btn-px xbtn" id="btn-share-x">
+          <svg class="x-icon" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          POST ON X
+        </button>
+      </div>
+      <button class="btn-home-px" id="btn-home-from-dead">[ HOME ]</button>
+    </div>
+  </div>
+</div>
+
+<div id="name-modal">
+  <div id="name-box">
+    <h3>ENTER NAME</h3>
+    <p>Your name will appear<br>on the leaderboard!</p>
+    <input id="name-input" maxlength="12" placeholder="YOUR NAME">
+    <button class="btn-save-px" id="btn-save-name">OK</button>
+  </div>
+</div>
+<div id="toast"></div>
+</div><!-- #root -->
+</div><!-- #scale-wrap -->
+
+<script type="module">
+// ---- RESPONSIVE SCALE ----
+function applyScale(){
+  const wrap = document.getElementById('scale-wrap');
+  const vw = window.innerWidth;
+  // Use visualViewport on mobile to account for browser chrome
+  const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  const gameH = 660;
+  const scale = Math.min(vw / 360, vh / gameH, 1.8);
+  wrap.style.transform = `scale(${scale})`;
+}
+applyScale();
+window.addEventListener('resize', applyScale);
+if(window.visualViewport) window.visualViewport.addEventListener('resize', applyScale);
+
+// ---- FIREBASE ----
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getDatabase, ref, set, get, onValue, orderByChild, limitToLast, query }
+  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyAKlOUePBw2Juvy5TU8myZHydfXl1vw15k",
+  authDomain:        "flappy-lunar.firebaseapp.com",
+  databaseURL:       "https://flappy-lunar-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "flappy-lunar",
+  storageBucket:     "flappy-lunar.firebasestorage.app",
+  messagingSenderId: "280198539885",
+  appId:             "1:280198539885:web:18ce12cfde202675ddad64"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db    = getDatabase(fbApp);
+
+const fbDot     = document.getElementById('fb-dot');
+const lbHeader  = document.getElementById('lb-header');
+const liveBadge = document.getElementById('live-badge');
+let fbConnected = false;
+let prevGlobalLB = [];
+
+onValue(ref(db, '.info/connected'), snap => {
+  fbConnected = snap.val() === true;
+  fbDot.className = 'fb-dot' + (fbConnected ? '' : ' offline');
+  liveBadge.style.display = fbConnected ? 'inline' : 'none';
+  // re-render so scoreboard reflects connection state (local vs global data)
+  renderLB();
+});
+
+async function saveFB(name, sc){
+  if(!fbConnected) return;
+  try{
+    const key = name.replace(/[.#$[\]/]/g,'_');
+    const r   = ref(db,'leaderboard/'+key);
+    const snap = await get(r);
+    const cur  = snap.exists() ? snap.val().score : 0;
+    if(sc > cur) await set(r,{name,score:sc,ts:Date.now()});
+  }catch(e){ console.warn('FB save:',e); }
+}
+
+// REALTIME subscription — fires instantly whenever anyone's score changes
+function subscribeGlobal(){
+  const q = query(ref(db,'leaderboard'), orderByChild('score'), limitToLast(10));
+  onValue(q, snap => {
+    if(!snap.exists()){ renderLB([]); return; }
+    const rows = [];
+    snap.forEach(c => rows.push(c.val()));
+    rows.sort((a,b) => b.score - a.score);
+    // detect which rows changed to animate them
+    const changed = new Set();
+    rows.forEach((r,i) => {
+      const prev = prevGlobalLB[i];
+      if(!prev || prev.name !== r.name || prev.score !== r.score) changed.add(i);
+    });
+    prevGlobalLB = rows;
+    globalLB = rows;
+    renderLB(changed);
+  });
+}
+
+// ---- IMAGES ----
+const IMG_NORMAL = new Image(), IMG_FLAP = new Image(), IMG_GROUND = new Image(), IMG_FORK = new Image();
+IMG_NORMAL.crossOrigin = IMG_FLAP.crossOrigin = IMG_GROUND.crossOrigin = IMG_FORK.crossOrigin = 'anonymous';
+IMG_NORMAL.src = 'https://i.ibb.co/cSkV90ws/lunar-flappy-duck.png';
+IMG_FLAP.src   = 'https://i.ibb.co/tp6kpmyF/lunar-flappy-duck2.png';
+IMG_GROUND.src = 'https://i.ibb.co/SD41NRq1/Lunar-flappy-floorbig.png';
+IMG_FORK.src   = 'https://i.ibb.co/20MwbzDx/Fork-yellow-big.png';
+
+// ---- STATE ----
+let playerName = localStorage.getItem('fw_name') || '';
+let localLB    = JSON.parse(localStorage.getItem('fw_lb') || '[]');
+let globalLB   = [];
+let gameState  = 'idle', score = 0, best = 0, raf;
+
+const W=360, H=560;
+// Tighter, snappier physics
+const BASE_GRAVITY=0.32, BASE_FLAP_V=-7.2, BASE_PIPE_GAP=200, BASE_PIPE_W=64, BASE_PIPE_SPEED=2.6, BASE_PIPE_INTERVAL=95;
+let GRAVITY=BASE_GRAVITY, FLAP_V=BASE_FLAP_V, PIPE_GAP=BASE_PIPE_GAP, PIPE_W=BASE_PIPE_W, PIPE_SPEED=BASE_PIPE_SPEED, PIPE_INTERVAL=BASE_PIPE_INTERVAL;
+let bird, pipes, hazards, frame, groundX, cloudX;
+// Wind state
+let windForce=0, windTimer=0, windWarning=0;
+
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ---- LEADERBOARD ----
+function saveLocalLB(sc){
+  const i = localLB.findIndex(r=>r.name===playerName);
+  if(i>=0){ if(sc>localLB[i].score) localLB[i].score=sc; }
+  else localLB.push({name:playerName,score:sc});
+  localLB.sort((a,b)=>b.score-a.score);
+  localLB = localLB.slice(0,10);
+  localStorage.setItem('fw_lb',JSON.stringify(localLB));
+}
+
+function renderLB(changed=new Set()){
+  const list = document.getElementById('lb-list');
+
+  // Show loading while Firebase is connecting for the first time
+  if(!fbConnected && globalLB.length === 0 && localLB.length === 0){
+    list.innerHTML='<div class="lb-loading">CONNECTING...</div>';
+    return;
+  }
+
+  const rows = globalLB.length ? globalLB : localLB;
+
+  if(!playerName){
+    list.innerHTML='<div class="lb-empty" style="font-size:6px;line-height:2">ENTER YOUR NAME<br>TO SEE STATS!</div>';
+    return;
+  }
+
+  const myRow = rows.find(r=>r.name===playerName);
+  const myRank = rows.findIndex(r=>r.name===playerName)+1;
+  const totalPlayers = rows.length;
+  const medals = ['🥇','🥈','🥉','4TH','5TH','6TH','7TH','8TH','9TH','10TH'];
+
+  if(!myRow){
+    list.innerHTML='<div class="lb-empty" style="font-size:6px;line-height:2">PLAY TO GET<br>ON THE BOARD!</div>';
+    return;
+  }
+
+  list.innerHTML = `
+    <div class="lb-row" style="justify-content:center;border-top:none;padding:4px 0 2px;">
+      <div class="lb-rank" style="width:auto;font-size:8px;color:#fff700">${medals[myRank-1]||myRank+'TH'}</div>
+    </div>
+    <div style="text-align:center;padding:4px 0 2px;">
+      <div style="font-size:10px;color:#fff;text-shadow:1px 1px 0 #7a5400">${myRow.name} ★</div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:24px;padding:6px 0 4px;">
+      <div style="text-align:center">
+        <div style="font-size:16px;color:#fff700;text-shadow:2px 2px 0 #7a5400">${myRow.score}</div>
+        <div style="font-size:6px;color:#fff;margin-top:3px">BEST SCORE</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:16px;color:#fff700;text-shadow:2px 2px 0 #7a5400">#${myRank}</div>
+        <div style="font-size:6px;color:#fff;margin-top:3px">RANK</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:16px;color:#fff700;text-shadow:2px 2px 0 #7a5400">${totalPlayers}</div>
+        <div style="font-size:6px;color:#fff;margin-top:3px">PLAYERS</div>
+      </div>
+    </div>`;
+}
+
+function askName(cb){
+  if(playerName){ cb(); return; }
+  document.getElementById('name-modal').style.display='flex';
+  document.getElementById('btn-save-name').onclick = () => {
+    const v = document.getElementById('name-input').value.trim();
+    if(!v) return;
+    playerName=v; localStorage.setItem('fw_name',v);
+    document.getElementById('name-modal').style.display='none';
+    cb();
+  };
+}
+
+// ---- GAME ----
+function updateDifficulty(){
+  const stage = Math.floor(score / 5);
+  PIPE_SPEED    = Math.min(BASE_PIPE_SPEED + stage * 0.22, 5.8);
+  PIPE_GAP      = Math.max(BASE_PIPE_GAP   - stage * 9,   118);
+  PIPE_INTERVAL = Math.max(BASE_PIPE_INTERVAL - stage * 4, 55);
+  GRAVITY       = Math.min(BASE_GRAVITY + stage * 0.013, 0.50);
+}
+
+function initGame(){
+  bird={x:80,y:H/2-20,vy:0,angle:0,flapping:false,flapTimer:0};
+  pipes=[];hazards=[];frame=0;groundX=0;cloudX=0;score=0;
+  windForce=0;windTimer=0;windWarning=0;
+  // reset difficulty
+  PIPE_SPEED=BASE_PIPE_SPEED; PIPE_GAP=BASE_PIPE_GAP;
+  PIPE_INTERVAL=BASE_PIPE_INTERVAL; GRAVITY=BASE_GRAVITY;
+  document.getElementById('dead-overlay').style.display='none';
+}
+
+function startGame(){ gameState='playing'; initGame(); loop(); }
+
+async function endGame(){
+  gameState='dead';
+  const isNew = score>best;
+  if(isNew) best=score;
+  if(playerName){
+    saveLocalLB(score);
+    await saveFB(playerName,score);
+  }
+
+  // populate summary card
+  document.getElementById('sc-score').textContent = score;
+  document.getElementById('sc-best').textContent  = best;
+  document.getElementById('sc-player').textContent = playerName ? '👤 ' + playerName : 'Anonymous';
+
+  const rows = globalLB.length ? globalLB : localLB;
+  const myRank = rows.findIndex(r=>r.name===playerName)+1;
+  const medals = ['🥇','🥈','🥉'];
+  const rankLabel = myRank > 0
+    ? (medals[myRank-1] || '#'+myRank) + ' / ' + rows.length
+    : '—';
+  document.getElementById('sc-rank').textContent = rankLabel;
+
+  document.getElementById('new-best-tag').style.display = isNew&&score>0?'block':'none';
+  document.getElementById('dead-overlay').style.display = 'flex';
+}
+
+function doFlap(){
+  if(gameState==='playing'){ bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20; }
+}
+
+function spawnPipe(){
+  const stage = Math.floor(score/5);
+  const minY=90, maxY=H-90-PIPE_GAP-80;
+  const topH = Math.floor(Math.random()*(maxY-minY)+minY);
+  // Moving pipes start at stage 3 (score 15)
+  const moves = stage >= 3;
+  const moveAmp  = moves ? Math.min(18 + stage*3, 55) : 0;
+  const moveSpeed= moves ? (0.018 + stage*0.004) : 0;
+  pipes.push({x:W+10, topH, passed:false, baseTopH:topH, moveAmp, moveSpeed, movePhase:Math.random()*Math.PI*2});
+
+  // Spawn meteor hazard inside gap starting stage 2 (score 10), ~40% chance
+  if(stage >= 2 && Math.random() < 0.40){
+    spawnHazard(topH + PIPE_GAP/2, W+10+PIPE_W/2);
+  }
+}
+
+function spawnHazard(gapCenterY, startX){
+  // Meteor: drifts left with pipes, bobs slightly up-down
+  hazards.push({
+    x: startX + 40,
+    y: gapCenterY,
+    baseY: gapCenterY,
+    r: 10,
+    phase: Math.random()*Math.PI*2,
+    bobAmp: 14 + Math.random()*10,
+    bobSpeed: 0.04 + Math.random()*0.02
+  });
+}
+
+// ---- DRAW ----
+function drawPixelCloud(x,y,sc){
+  const blocks=[[1,2,7,3],[3,1,5,3],[0,3,9,3]];
+  ctx.fillStyle='rgba(255,255,255,0.88)';
+  blocks.forEach(([bx,by,bw,bh])=>ctx.fillRect(x+bx*sc,y+by*sc,bw*sc,bh*sc));
+}
+function drawBg(){
+  ctx.fillStyle='#5c94fc'; ctx.fillRect(0,0,W,H-80);
+  drawPixelCloud(((cloudX*0.28+20 )%(W+120))-60,48,5);
+  drawPixelCloud(((cloudX*0.28+185)%(W+120))-60,28,4);
+  drawPixelCloud(((cloudX*0.28+310)%(W+120))-60,70,3.5);
+}
+// ground pattern — built once image is loaded for seamless repeat
+let groundPattern = null;
+let groundTileW = 0;
+IMG_GROUND.onload = () => {
+  const gh = 80;
+  const scale = gh / IMG_GROUND.naturalHeight;
+  groundTileW = Math.ceil(IMG_GROUND.naturalWidth * scale);
+  const off = document.createElement('canvas');
+  off.width = groundTileW; off.height = gh;
+  off.getContext('2d').drawImage(IMG_GROUND, 0, 0, groundTileW, gh);
+  groundPattern = ctx.createPattern(off, 'repeat');
+};
+
+function drawGround(){
+  const gh=80, gy=H-gh;
+  if(groundPattern && groundTileW>0){
+    const offset = ((groundX % groundTileW) + groundTileW) % groundTileW;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, -offset, gy);
+    ctx.fillStyle = groundPattern;
+    ctx.fillRect(0, 0, W + groundTileW, gh);
+    ctx.restore();
+  } else if(IMG_GROUND.complete && IMG_GROUND.naturalWidth>0){
+    const scale = gh/IMG_GROUND.naturalHeight;
+    const sw = IMG_GROUND.naturalWidth*scale;
+    const offset = ((groundX%sw)+sw)%sw;
+    for(let x=-offset; x<W+sw; x+=sw) ctx.drawImage(IMG_GROUND,x,gy,sw,gh);
+  } else {
+    ctx.fillStyle='#5d8a3c'; ctx.fillRect(0,gy,W,gh);
+  }
+}
+function drawMeteor(h){
+  const x=h.x, y=h.y, r=h.r;
+  // glowing rock
+  ctx.save();
+  ctx.shadowColor='rgba(255,120,0,0.7)';
+  ctx.shadowBlur=10;
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle='#c0392b'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.strokeStyle='#ff6b35'; ctx.lineWidth=2; ctx.stroke();
+  // craters
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#8b1a1a';
+  ctx.beginPath(); ctx.arc(x-3,y-2,3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+3,y+3,2,0,Math.PI*2); ctx.fill();
+  // tail sparks
+  for(let i=0;i<4;i++){
+    const sx=x+(r+4+i*5)*(0.6+Math.random()*0.3);
+    const sy=y+(Math.random()-0.5)*8;
+    ctx.fillStyle=`rgba(255,${100+i*30},0,${0.7-i*0.15})`;
+    ctx.beginPath(); ctx.arc(sx,sy,3-i*0.5,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawWindWarning(){
+  if(windWarning<=0) return;
+  const alpha=Math.min(windWarning/30,1);
+  const dir=windForce>0?'▼ WIND▼':'▲ WIND▲';
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=windForce>0?'#ff4444':'#44aaff';
+  ctx.font='9px "Press Start 2P"';
+  ctx.textAlign='center';
+  ctx.fillText(dir,W/2,H/2-20);
+  ctx.restore();
+}
+
+function drawFork(p){
+  const fw=PIPE_W, cx=p.x+fw/2;
+  if(IMG_FORK.complete && IMG_FORK.naturalWidth>0){
+    const scale=fw/IMG_FORK.naturalWidth;
+    const fh=IMG_FORK.naturalHeight*scale;
+    ctx.save();
+    ctx.translate(cx,p.topH);
+    ctx.scale(1,-1);
+    ctx.drawImage(IMG_FORK,-fw/2,0,fw,fh);
+    ctx.restore();
+    const handleTop = p.topH-fh;
+    if(handleTop>0){
+      ctx.fillStyle='#f5d020'; ctx.fillRect(cx-fw*0.28,0,fw*0.56,handleTop);
+      ctx.fillStyle='#c8a800'; ctx.fillRect(cx-fw*0.28,0,fw*0.07,handleTop);
+      ctx.fillStyle='#fff176'; ctx.fillRect(cx+fw*0.18,0,fw*0.07,handleTop);
+    }
+    const botY=p.topH+PIPE_GAP;
+    ctx.drawImage(IMG_FORK,cx-fw/2,botY,fw,fh);
+    const handleBot=botY+fh;
+    if(handleBot<H-80){
+      ctx.fillStyle='#f5d020'; ctx.fillRect(cx-fw*0.28,handleBot,fw*0.56,H-80-handleBot);
+      ctx.fillStyle='#c8a800'; ctx.fillRect(cx-fw*0.28,handleBot,fw*0.07,H-80-handleBot);
+      ctx.fillStyle='#fff176'; ctx.fillRect(cx+fw*0.18,handleBot,fw*0.07,H-80-handleBot);
+    }
+  } else {
+    ctx.fillStyle='#f5d020';
+    ctx.beginPath(); ctx.roundRect(cx-fw*0.28,0,fw*0.56,p.topH,[0,0,6,6]); ctx.fill();
+    const botY=p.topH+PIPE_GAP;
+    ctx.beginPath(); ctx.roundRect(cx-fw*0.28,botY,fw*0.56,H-80-botY,[6,6,0,0]); ctx.fill();
+  }
+}
+function drawBird(){
+  const useImg=(bird.flapping&&IMG_FLAP.complete&&IMG_FLAP.naturalWidth>0)?IMG_FLAP
+              :(IMG_NORMAL.complete&&IMG_NORMAL.naturalWidth>0?IMG_NORMAL:null);
+  if(!useImg) return;
+  ctx.save();
+  ctx.translate(bird.x,bird.y);
+  ctx.rotate(Math.max(-0.45,Math.min(bird.angle,1.3)));
+  ctx.drawImage(useImg,-32,-32,64,64);
+  ctx.restore();
+}
+function drawScorePanel(){
+  ctx.fillStyle='rgba(0,0,0,0.38)'; ctx.fillRect(W/2-40,10,80,36);
+  ctx.fillStyle='#fff700'; ctx.font='20px "Press Start 2P"'; ctx.textAlign='center';
+  ctx.fillText(score,W/2,36); ctx.textAlign='left';
+  const stage = Math.floor(score/5);
+  if(stage>0){
+    const lv='LV.'+stage;
+    ctx.font='7px "Press Start 2P"';
+    ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(W-44,10,36,16);
+    ctx.fillStyle= stage>=6?'#ff4444': stage>=3?'#ff9900':'#aaffaa';
+    ctx.textAlign='center'; ctx.fillText(lv,W-26,22); ctx.textAlign='left';
+  }
+  // meteor active indicator
+  if(hazards && hazards.length>0){
+    ctx.font='7px "Press Start 2P"';
+    ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(4,10,60,16);
+    ctx.fillStyle='#ff6b35';
+    ctx.textAlign='left'; ctx.fillText('\u2604 x'+hazards.length,8,22);
+  }
+}
+function collides(p){
+  const br=20,cO=9;
+  if(bird.x+br<p.x-cO||bird.x-br>p.x+PIPE_W+cO) return false;
+  if(bird.y-br<p.topH) return true;
+  if(bird.y+br>p.topH+PIPE_GAP) return true;
+  return false;
+}
+
+function loop(){
+  ctx.clearRect(0,0,W,H); drawBg();
+  if(gameState==='playing'){
+    frame++; cloudX+=PIPE_SPEED; groundX+=PIPE_SPEED;
+
+    // Wind system — triggers every 8-12s starting stage 2
+    const stage=Math.floor(score/5);
+    if(stage>=2){
+      windTimer--;
+      if(windWarning>0) windWarning--;
+      if(windTimer<=0){
+        // alternate or random direction
+        windForce=(Math.random()<0.5?1:-1)*(0.10+stage*0.012);
+        windTimer=180+Math.floor(Math.random()*120); // 3-5s active
+        windWarning=40;
+        // gust only lasts ~1.5s then fades
+        setTimeout(()=>{ windForce=0; },1500+Math.random()*1000);
+      }
+    }
+
+    // Apply wind + gravity
+    bird.vy += GRAVITY + windForce;
+    bird.y  += bird.vy;
+    bird.angle=Math.max(-0.45,Math.min(bird.vy*0.08,1.3));
+    if(bird.flapTimer>0){bird.flapTimer--;}else{bird.flapping=false;}
+
+    // Spawn pipes
+    if(frame%PIPE_INTERVAL===0) spawnPipe();
+
+    // Update pipes (move + vertical oscillation)
+    for(let i=pipes.length-1;i>=0;i--){
+      const p=pipes[i];
+      p.x-=PIPE_SPEED;
+      if(p.moveAmp>0) p.topH=p.baseTopH+Math.sin(frame*p.moveSpeed+p.movePhase)*p.moveAmp;
+      if(!p.passed&&p.x+PIPE_W<bird.x){p.passed=true;score++;updateDifficulty();}
+      if(p.x+PIPE_W+10<0) pipes.splice(i,1);
+    }
+
+    // Update hazards
+    for(let i=hazards.length-1;i>=0;i--){
+      const h=hazards[i];
+      h.x-=PIPE_SPEED;
+      h.y=h.baseY+Math.sin(frame*h.bobSpeed+h.phase)*h.bobAmp;
+      if(h.x+h.r<0) hazards.splice(i,1);
+    }
+
+    // Collision — pipes
+    const hitPipe=pipes.some(p=>collides(p));
+    // Collision — meteors (circle vs circle)
+    const br=18;
+    const hitMeteor=hazards.some(h=>{
+      const dx=bird.x-h.x, dy=bird.y-h.y;
+      return Math.sqrt(dx*dx+dy*dy)<br+h.r-3;
+    });
+    const dead=bird.y+28>=H-80||bird.y-28<=0||hitPipe||hitMeteor;
+    if(dead){
+      pipes.forEach(drawFork);
+      hazards.forEach(drawMeteor);
+      drawGround();drawBird();
+      endGame();cancelAnimationFrame(raf);return;
+    }
+  }
+  pipes.forEach(drawFork);
+  hazards.forEach(drawMeteor);
+  drawGround(); drawBird(); drawScorePanel(); drawWindWarning();
+  raf=requestAnimationFrame(loop);
+}
+
+// ---- SHARE ----
+function buildShareText(){
+  const rows=globalLB.length?globalLB:localLB;
+  const rank=rows.findIndex(r=>r.name===playerName)+1;
+  const totalPlayers=rows.length;
+  const rankText = rank>0 ? `#${rank} / ${totalPlayers} players` : 'unranked';
+  const lines = [
+    `🐼 FLAPPY LUNAR 🐣`,
+    ``,
+    `👤 ${playerName||'Anonymous'}`,
+    `🎯 Score: ${score}`,
+    `🏆 Best: ${best}`,
+    `📊 Rank: ${rankText}`,
+    ``,
+    `Can you beat me? 🕹️`,
+    `flappy-lunar.web.app`
+  ];
+  return lines.join('\n');
+}
+function doShareX(){
+  window.open('https://x.com/intent/tweet?text='+encodeURIComponent(buildShareText()),'_blank');
+}
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='block';
+  setTimeout(()=>t.style.display='none',2200);
+}
+
+// ---- PLAYER BAR ----
+function updatePlayerBar(){
+  const bar=document.getElementById('player-bar');
+  const nm=document.getElementById('player-name-display');
+  if(playerName){ nm.textContent=playerName; bar.style.display='flex'; }
+  else bar.style.display='none';
+  // refresh scoreboard whenever player identity changes
+  renderLB();
+}
+function openChangeName(){
+  document.getElementById('name-input').value=playerName||'';
+  document.getElementById('name-modal').style.display='flex';
+  document.getElementById('btn-save-name').onclick=()=>{
+    const v=document.getElementById('name-input').value.trim();
+    if(!v) return;
+    playerName=v; localStorage.setItem('fw_name',v);
+    document.getElementById('name-modal').style.display='none';
+    updatePlayerBar(); showToast('NAME SAVED!');
+  };
+}
+
+// ---- EVENTS ----
+document.getElementById('btn-play').onclick = ()=>askName(()=>{updatePlayerBar();showScreen('game-screen');startGame();});
+document.getElementById('btn-change-name').onclick = openChangeName;
+
+// Universal input — pointerdown covers mouse + touch + stylus on all devices
+canvas.addEventListener('pointerdown', e=>{ e.preventDefault(); doFlap(); }, {passive:false});
+// Fallback for older browsers
+canvas.addEventListener('click', doFlap);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();doFlap();},{passive:false});
+
+// Space / Enter / ArrowUp for PC
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW'){e.preventDefault();doFlap();}
+});
+
+document.getElementById('btn-restart').onclick = ()=>{document.getElementById('dead-overlay').style.display='none';startGame();};
+document.getElementById('btn-share-x').onclick = doShareX;
+document.getElementById('btn-home-from-dead').onclick = ()=>{
+  cancelAnimationFrame(raf); gameState='idle';
+  showScreen('home'); updatePlayerBar();
+};
+
+// ---- INIT ----
+updatePlayerBar();
+subscribeGlobal(); // single realtime listener — no need for loadFB separately
+</script>
+</body>
+</html>
