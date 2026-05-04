@@ -267,88 +267,27 @@ html,body{
 </div><!-- #scale-wrap -->
 
 <script type="module">
-// ---- RESPONSIVE SCALE ----
-const GAME_W = 360;
-const GAME_H = 560;
-
-function applyScale(){
-  const vw = window.innerWidth;
-  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  const scale = Math.min(vw / GAME_W, vh / GAME_H);
-  const wrap = document.getElementById('scale-wrap');
-  wrap.style.transform = `scale(${scale})`;
-  wrap.style.transformOrigin = 'top center';
-  const scaledH = GAME_H * scale;
-  const topOffset = Math.max(0, (vh - scaledH) / 2);
-  wrap.style.marginTop = topOffset + 'px';
-  const home = document.getElementById('home');
-  home.style.height = GAME_H + 'px';
-}
-window.addEventListener('resize', applyScale);
-if(window.visualViewport) window.visualViewport.addEventListener('resize', applyScale);
-
-// ---- FIREBASE ----
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getDatabase, ref, set, get, onValue, orderByChild, limitToLast, query }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
-const firebaseConfig = {
-  apiKey:            "AIzaSyAKlOUePBw2Juvy5TU8myZHydfXl1vw15k",
-  authDomain:        "flappy-lunar.firebaseapp.com",
-  databaseURL:       "https://flappy-lunar-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "flappy-lunar",
-  storageBucket:     "flappy-lunar.firebasestorage.app",
-  messagingSenderId: "280198539885",
-  appId:             "1:280198539885:web:18ce12cfde202675ddad64"
-};
+// ---- CONSTANTS ----
+const W=360, H=560;
+const BASE_GRAVITY=0.26, BASE_FLAP_V=-6.4, BASE_PIPE_GAP=225, BASE_PIPE_W=64, BASE_PIPE_SPEED=1.9, BASE_PIPE_INTERVAL=115;
+let GRAVITY=BASE_GRAVITY, FLAP_V=BASE_FLAP_V, PIPE_GAP=BASE_PIPE_GAP, PIPE_W=BASE_PIPE_W, PIPE_SPEED=BASE_PIPE_SPEED, PIPE_INTERVAL=BASE_PIPE_INTERVAL;
 
-const fbApp = initializeApp(firebaseConfig);
-const db    = getDatabase(fbApp);
-
-const fbDot     = document.getElementById('fb-dot');
-const lbHeader  = document.getElementById('lb-header');
-const liveBadge = document.getElementById('live-badge');
+// ---- STATE ----
+let playerName = localStorage.getItem('fw_name') || '';
+let localLB    = JSON.parse(localStorage.getItem('fw_lb') || '[]');
+let globalLB   = [], prevGlobalLB = [];
 let fbConnected = false;
-let prevGlobalLB = [];
+let gameState = 'idle', score = 0, best = 0, raf;
+let bird, pipes, frame, groundX, cloudX;
 
-onValue(ref(db, '.info/connected'), snap => {
-  fbConnected = snap.val() === true;
-  fbDot.className = 'fb-dot' + (fbConnected ? '' : ' offline');
-  liveBadge.style.display = fbConnected ? 'inline' : 'none';
-  // re-render so scoreboard reflects connection state (local vs global data)
-  renderLB();
-});
-
-async function saveFB(name, sc){
-  if(!fbConnected) return;
-  try{
-    const key = name.replace(/[.#$[\]/]/g,'_');
-    const r   = ref(db,'leaderboard/'+key);
-    const snap = await get(r);
-    const cur  = snap.exists() ? snap.val().score : 0;
-    if(sc > cur) await set(r,{name,score:sc,ts:Date.now()});
-  }catch(e){ console.warn('FB save:',e); }
-}
-
-// REALTIME subscription — fires instantly whenever anyone's score changes
-function subscribeGlobal(){
-  const q = query(ref(db,'leaderboard'), orderByChild('score'), limitToLast(10));
-  onValue(q, snap => {
-    if(!snap.exists()){ renderLB([]); return; }
-    const rows = [];
-    snap.forEach(c => rows.push(c.val()));
-    rows.sort((a,b) => b.score - a.score);
-    // detect which rows changed to animate them
-    const changed = new Set();
-    rows.forEach((r,i) => {
-      const prev = prevGlobalLB[i];
-      if(!prev || prev.name !== r.name || prev.score !== r.score) changed.add(i);
-    });
-    prevGlobalLB = rows;
-    globalLB = rows;
-    renderLB(changed);
-  });
-}
+// ---- CANVAS ----
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+canvas.width = W; canvas.height = H;
 
 // ---- IMAGES ----
 const IMG_NORMAL = new Image(), IMG_FLAP = new Image(), IMG_GROUND = new Image(), IMG_FORK = new Image();
@@ -358,66 +297,92 @@ IMG_FLAP.src   = 'https://i.ibb.co/tp6kpmyF/lunar-flappy-duck2.png';
 IMG_GROUND.src = 'https://i.ibb.co/SD41NRq1/Lunar-flappy-floorbig.png';
 IMG_FORK.src   = 'https://i.ibb.co/20MwbzDx/Fork-yellow-big.png';
 
-// ---- STATE ----
-let playerName = localStorage.getItem('fw_name') || '';
-let localLB    = JSON.parse(localStorage.getItem('fw_lb') || '[]');
-let globalLB   = [];
-let gameState  = 'idle', score = 0, best = 0, raf;
+// ---- RESPONSIVE SCALE ----
+function applyScale(){
+  const vw = window.innerWidth;
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const scale = Math.min(vw / W, vh / H);
+  const wrap = document.getElementById('scale-wrap');
+  wrap.style.transform = `scale(${scale})`;
+  wrap.style.transformOrigin = 'top center';
+  wrap.style.marginTop = Math.max(0,(vh - H*scale)/2) + 'px';
+  document.getElementById('home').style.height = H + 'px';
+}
+applyScale();
+window.addEventListener('resize', applyScale);
+if(window.visualViewport) window.visualViewport.addEventListener('resize', applyScale);
 
-const W=360, H=560;
-// ผ่อนคลายลง — ช้าลง ช่องกว้างขึ้น
-const BASE_GRAVITY=0.26, BASE_FLAP_V=-6.4, BASE_PIPE_GAP=225, BASE_PIPE_W=64, BASE_PIPE_SPEED=1.9, BASE_PIPE_INTERVAL=115;
-let GRAVITY=BASE_GRAVITY, FLAP_V=BASE_FLAP_V, PIPE_GAP=BASE_PIPE_GAP, PIPE_W=BASE_PIPE_W, PIPE_SPEED=BASE_PIPE_SPEED, PIPE_INTERVAL=BASE_PIPE_INTERVAL;
-let bird, pipes, frame, groundX, cloudX;
+// ---- FIREBASE ----
+const fbApp = initializeApp({
+  apiKey:"AIzaSyAKlOUePBw2Juvy5TU8myZHydfXl1vw15k",
+  authDomain:"flappy-lunar.firebaseapp.com",
+  databaseURL:"https://flappy-lunar-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"flappy-lunar",
+  storageBucket:"flappy-lunar.firebasestorage.app",
+  messagingSenderId:"280198539885",
+  appId:"1:280198539885:web:18ce12cfde202675ddad64"
+});
+const db = getDatabase(fbApp);
+const fbDot     = document.getElementById('fb-dot');
+const liveBadge = document.getElementById('live-badge');
 
-const canvas = document.getElementById('canvas');
-const ctx    = canvas.getContext('2d');
-canvas.width  = GAME_W;
-canvas.height = GAME_H;
-applyScale(); // safe to call now — canvas exists
+onValue(ref(db,'.info/connected'), snap => {
+  fbConnected = snap.val()===true;
+  fbDot.className = 'fb-dot'+(fbConnected?'':' offline');
+  liveBadge.style.display = fbConnected?'inline':'none';
+  renderLB();
+});
 
-function showScreen(id){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+async function saveFB(name,sc){
+  if(!fbConnected) return;
+  try{
+    const key=name.replace(/[.#$[\]/]/g,'_');
+    const r=ref(db,'leaderboard/'+key);
+    const snap=await get(r);
+    const cur=snap.exists()?snap.val().score:0;
+    if(sc>cur) await set(r,{name,score:sc,ts:Date.now()});
+  }catch(e){ console.warn('FB save:',e); }
+}
+
+function subscribeGlobal(){
+  const q=query(ref(db,'leaderboard'),orderByChild('score'),limitToLast(10));
+  onValue(q,snap=>{
+    if(!snap.exists()){ globalLB=[]; renderLB(); return; }
+    const rows=[];
+    snap.forEach(c=>rows.push(c.val()));
+    rows.sort((a,b)=>b.score-a.score);
+    prevGlobalLB=rows; globalLB=rows;
+    renderLB();
+  });
 }
 
 // ---- LEADERBOARD ----
 function saveLocalLB(sc){
-  const i = localLB.findIndex(r=>r.name===playerName);
+  const i=localLB.findIndex(r=>r.name===playerName);
   if(i>=0){ if(sc>localLB[i].score) localLB[i].score=sc; }
   else localLB.push({name:playerName,score:sc});
   localLB.sort((a,b)=>b.score-a.score);
-  localLB = localLB.slice(0,10);
+  localLB=localLB.slice(0,10);
   localStorage.setItem('fw_lb',JSON.stringify(localLB));
 }
 
-function renderLB(changed=new Set()){
-  const list = document.getElementById('lb-list');
-
-  // Show loading while Firebase is connecting for the first time
-  if(!fbConnected && globalLB.length === 0 && localLB.length === 0){
-    list.innerHTML='<div class="lb-loading">CONNECTING...</div>';
-    return;
+function renderLB(){
+  const list=document.getElementById('lb-list');
+  if(!fbConnected&&globalLB.length===0&&localLB.length===0){
+    list.innerHTML='<div class="lb-loading">CONNECTING...</div>'; return;
   }
-
-  const rows = globalLB.length ? globalLB : localLB;
-
+  const rows=globalLB.length?globalLB:localLB;
   if(!playerName){
-    list.innerHTML='<div class="lb-empty" style="font-size:6px;line-height:2">ENTER YOUR NAME<br>TO SEE STATS!</div>';
-    return;
+    list.innerHTML='<div class="lb-empty" style="font-size:6px;line-height:2">ENTER YOUR NAME<br>TO SEE STATS!</div>'; return;
   }
-
-  const myRow = rows.find(r=>r.name===playerName);
-  const myRank = rows.findIndex(r=>r.name===playerName)+1;
-  const totalPlayers = rows.length;
-  const medals = ['🥇','🥈','🥉','4TH','5TH','6TH','7TH','8TH','9TH','10TH'];
-
+  const myRow=rows.find(r=>r.name===playerName);
+  const myRank=rows.findIndex(r=>r.name===playerName)+1;
+  const total=rows.length;
+  const medals=['🥇','🥈','🥉','4TH','5TH','6TH','7TH','8TH','9TH','10TH'];
   if(!myRow){
-    list.innerHTML='<div class="lb-empty" style="font-size:6px;line-height:2">PLAY TO GET<br>ON THE BOARD!</div>';
-    return;
+    list.innerHTML='<div class="lb-empty" style="font-size:6px;line-height:2">PLAY TO GET<br>ON THE BOARD!</div>'; return;
   }
-
-  list.innerHTML = `
+  list.innerHTML=`
     <div class="lb-row" style="justify-content:center;border-top:none;padding:4px 0 2px;">
       <div class="lb-rank" style="width:auto;font-size:8px;color:#fff700">${medals[myRank-1]||myRank+'TH'}</div>
     </div>
@@ -434,332 +399,27 @@ function renderLB(changed=new Set()){
         <div style="font-size:6px;color:#fff;margin-top:3px">RANK</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:16px;color:#fff700;text-shadow:2px 2px 0 #7a5400">${totalPlayers}</div>
+        <div style="font-size:16px;color:#fff700;text-shadow:2px 2px 0 #7a5400">${total}</div>
         <div style="font-size:6px;color:#fff;margin-top:3px">PLAYERS</div>
       </div>
     </div>`;
 }
 
-function askName(cb){
-  if(playerName){ cb(); return; }
-  document.getElementById('name-modal').style.display='flex';
-  document.getElementById('btn-save-name').onclick = () => {
-    const v = document.getElementById('name-input').value.trim();
-    if(!v) return;
-    playerName=v; localStorage.setItem('fw_name',v);
-    document.getElementById('name-modal').style.display='none';
-    cb();
-  };
-}
-
-// ---- GAME ----
-function updateDifficulty(){
-  const stage = Math.floor(score / 5);
-  PIPE_SPEED    = Math.min(BASE_PIPE_SPEED + stage * 0.14, 4.2);
-  PIPE_GAP      = Math.max(BASE_PIPE_GAP   - stage * 7,   145);
-  PIPE_INTERVAL = Math.max(BASE_PIPE_INTERVAL - stage * 3, 70);
-  GRAVITY       = Math.min(BASE_GRAVITY + stage * 0.009, 0.40);
-}
-
-function initGame(){
-  bird={x:80,y:H/2-20,vy:0,angle:0,flapping:false,flapTimer:0};
-  pipes=[];frame=0;groundX=0;cloudX=0;score=0;
-  // reset difficulty
-  PIPE_SPEED=BASE_PIPE_SPEED; PIPE_GAP=BASE_PIPE_GAP;
-  PIPE_INTERVAL=BASE_PIPE_INTERVAL; GRAVITY=BASE_GRAVITY;
-  document.getElementById('dead-overlay').style.display='none';
-}
-
-function startGame(){
-  gameState='ready';
-  initGame();
-  loop();
-}
-
-async function endGame(){
-  gameState='dead';
-  const isNew = score>best;
-  if(isNew) best=score;
-  if(playerName){
-    saveLocalLB(score);
-    await saveFB(playerName,score);
-  }
-
-  // populate summary card
-  document.getElementById('sc-score').textContent = score;
-  document.getElementById('sc-best').textContent  = best;
-  document.getElementById('sc-player').textContent = playerName ? '👤 ' + playerName : 'Anonymous';
-
-  const rows = globalLB.length ? globalLB : localLB;
-  const myRank = rows.findIndex(r=>r.name===playerName)+1;
-  const medals = ['🥇','🥈','🥉'];
-  const rankLabel = myRank > 0
-    ? (medals[myRank-1] || '#'+myRank) + ' / ' + rows.length
-    : '—';
-  document.getElementById('sc-rank').textContent = rankLabel;
-
-  document.getElementById('new-best-tag').style.display = isNew&&score>0?'block':'none';
-  document.getElementById('dead-overlay').style.display = 'flex';
-}
-
-function doFlap(){
-  if(gameState==='ready'){
-    gameState='playing';
-    bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20;
-  } else if(gameState==='playing'){
-    bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20;
-  }
-}
-
-function spawnPipe(){
-  const stage = Math.floor(score/5);
-  const minY=90, maxY=H-90-PIPE_GAP-80;
-  const topH = Math.floor(Math.random()*(maxY-minY)+minY);
-  // Moving pipes start at stage 4 (score 20)
-  const moves = stage >= 4;
-  const moveAmp  = moves ? Math.min(12 + stage*2, 40) : 0;
-  const moveSpeed= moves ? (0.014 + stage*0.003) : 0;
-  pipes.push({x:W+10, topH, passed:false, baseTopH:topH, moveAmp, moveSpeed, movePhase:Math.random()*Math.PI*2});
-}
-
-// ---- DRAW ----
-function drawPixelCloud(x,y,sc){
-  const blocks=[[1,2,7,3],[3,1,5,3],[0,3,9,3]];
-  ctx.fillStyle='rgba(255,255,255,0.88)';
-  blocks.forEach(([bx,by,bw,bh])=>ctx.fillRect(x+bx*sc,y+by*sc,bw*sc,bh*sc));
-}
-function drawBg(){
-  ctx.fillStyle='#5c94fc'; ctx.fillRect(0,0,W,H-80);
-  drawPixelCloud(((cloudX*0.28+20 )%(W+120))-60,48,5);
-  drawPixelCloud(((cloudX*0.28+185)%(W+120))-60,28,4);
-  drawPixelCloud(((cloudX*0.28+310)%(W+120))-60,70,3.5);
-}
-// ground pattern — built once image is loaded for seamless repeat
-let groundPattern = null;
-let groundTileW = 0;
-IMG_GROUND.onload = () => {
-  const gh = 80;
-  const scale = gh / IMG_GROUND.naturalHeight;
-  groundTileW = Math.ceil(IMG_GROUND.naturalWidth * scale);
-  const off = document.createElement('canvas');
-  off.width = groundTileW; off.height = gh;
-  off.getContext('2d').drawImage(IMG_GROUND, 0, 0, groundTileW, gh);
-  groundPattern = ctx.createPattern(off, 'repeat');
-};
-
-function drawGround(){
-  const gh=80, gy=H-gh;
-  if(groundPattern && groundTileW>0){
-    const offset = ((groundX % groundTileW) + groundTileW) % groundTileW;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, -offset, gy);
-    ctx.fillStyle = groundPattern;
-    ctx.fillRect(0, 0, W + groundTileW, gh);
-    ctx.restore();
-  } else if(IMG_GROUND.complete && IMG_GROUND.naturalWidth>0){
-    const scale = gh/IMG_GROUND.naturalHeight;
-    const sw = IMG_GROUND.naturalWidth*scale;
-    const offset = ((groundX%sw)+sw)%sw;
-    for(let x=-offset; x<W+sw; x+=sw) ctx.drawImage(IMG_GROUND,x,gy,sw,gh);
-  } else {
-    ctx.fillStyle='#5d8a3c'; ctx.fillRect(0,gy,W,gh);
-  }
-}
-function drawFork(p){
-  const fw=PIPE_W, cx=p.x+fw/2;
-  if(IMG_FORK.complete && IMG_FORK.naturalWidth>0){
-    const scale=fw/IMG_FORK.naturalWidth;
-    const fh=IMG_FORK.naturalHeight*scale;
-    ctx.save();
-    ctx.translate(cx,p.topH);
-    ctx.scale(1,-1);
-    ctx.drawImage(IMG_FORK,-fw/2,0,fw,fh);
-    ctx.restore();
-    const handleTop = p.topH-fh;
-    if(handleTop>0){
-      ctx.fillStyle='#f5d020'; ctx.fillRect(cx-fw*0.28,0,fw*0.56,handleTop);
-      ctx.fillStyle='#c8a800'; ctx.fillRect(cx-fw*0.28,0,fw*0.07,handleTop);
-      ctx.fillStyle='#fff176'; ctx.fillRect(cx+fw*0.18,0,fw*0.07,handleTop);
-    }
-    const botY=p.topH+PIPE_GAP;
-    ctx.drawImage(IMG_FORK,cx-fw/2,botY,fw,fh);
-    const handleBot=botY+fh;
-    if(handleBot<H-80){
-      ctx.fillStyle='#f5d020'; ctx.fillRect(cx-fw*0.28,handleBot,fw*0.56,H-80-handleBot);
-      ctx.fillStyle='#c8a800'; ctx.fillRect(cx-fw*0.28,handleBot,fw*0.07,H-80-handleBot);
-      ctx.fillStyle='#fff176'; ctx.fillRect(cx+fw*0.18,handleBot,fw*0.07,H-80-handleBot);
-    }
-  } else {
-    ctx.fillStyle='#f5d020';
-    ctx.beginPath(); ctx.roundRect(cx-fw*0.28,0,fw*0.56,p.topH,[0,0,6,6]); ctx.fill();
-    const botY=p.topH+PIPE_GAP;
-    ctx.beginPath(); ctx.roundRect(cx-fw*0.28,botY,fw*0.56,H-80-botY,[6,6,0,0]); ctx.fill();
-  }
-}
-function drawBird(){
-  const useImg=(bird.flapping&&IMG_FLAP.complete&&IMG_FLAP.naturalWidth>0)?IMG_FLAP
-              :(IMG_NORMAL.complete&&IMG_NORMAL.naturalWidth>0?IMG_NORMAL:null);
-  if(!useImg) return;
-  ctx.save();
-  ctx.translate(bird.x,bird.y);
-  ctx.rotate(Math.max(-0.45,Math.min(bird.angle,1.3)));
-  ctx.drawImage(useImg,-32,-32,64,64);
-  ctx.restore();
-}
-function drawScorePanel(){
-  ctx.fillStyle='rgba(0,0,0,0.38)'; ctx.fillRect(W/2-40,10,80,36);
-  ctx.fillStyle='#fff700'; ctx.font='20px "Press Start 2P"'; ctx.textAlign='center';
-  ctx.fillText(score,W/2,36); ctx.textAlign='left';
-  const stage = Math.floor(score/5);
-  if(stage>0){
-    const lv='LV.'+stage;
-    ctx.font='7px "Press Start 2P"';
-    ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(W-44,10,36,16);
-    ctx.fillStyle= stage>=6?'#ff4444': stage>=3?'#ff9900':'#aaffaa';
-    ctx.textAlign='center'; ctx.fillText(lv,W-26,22); ctx.textAlign='left';
-  }
-}
-function collides(p){
-  const br=20,cO=9;
-  if(bird.x+br<p.x-cO||bird.x-br>p.x+PIPE_W+cO) return false;
-  if(bird.y-br<p.topH) return true;
-  if(bird.y+br>p.topH+PIPE_GAP) return true;
-  return false;
-}
-
-function drawReadyOverlay(){
-  // dim
-  ctx.fillStyle='rgba(0,0,0,0.32)';
-  ctx.fillRect(0,0,W,H);
-  // pulsing box
-  const pulse = 0.85 + 0.15*Math.sin(frame*0.08);
-  ctx.save();
-  ctx.globalAlpha=pulse;
-  ctx.fillStyle='rgba(0,0,0,0.55)';
-  ctx.fillRect(W/2-90,H/2-28,180,52);
-  ctx.strokeStyle='#fff700';
-  ctx.lineWidth=2;
-  ctx.strokeRect(W/2-90,H/2-28,180,52);
-  ctx.fillStyle='#fff700';
-  ctx.font='10px "Press Start 2P"';
-  ctx.textAlign='center';
-  ctx.fillText('TAP TO START!',W/2,H/2+8);
-  ctx.restore();
-  ctx.textAlign='left';
-}
-
-function loop(){
-  ctx.clearRect(0,0,W,H); drawBg();
-
-  if(gameState==='ready'){
-    frame++;
-    // bird hovers gently in place
-    bird.y = H/2-20 + Math.sin(frame*0.05)*6;
-    bird.angle=0;
-    drawFork && pipes.forEach(drawFork);
-    drawGround(); drawBird(); drawReadyOverlay();
-    raf=requestAnimationFrame(loop);
-    return;
-  }
-  if(gameState==='playing'){
-    frame++; cloudX+=PIPE_SPEED; groundX+=PIPE_SPEED;
-
-    // Wind system — triggers ตั้งแต่ stage 3 (score 15)
-    const stage=Math.floor(score/5);
-    if(stage>=3){
-      windTimer--;
-      if(windWarning>0) windWarning--;
-      if(windTimer<=0){
-        windForce=(Math.random()<0.5?1:-1)*(0.07+stage*0.008);
-        windTimer=220+Math.floor(Math.random()*120);
-        windWarning=40;
-        setTimeout(()=>{ windForce=0; },1200+Math.random()*800);
-      }
-    }
-
-    // Apply wind + gravity
-    bird.vy += GRAVITY + windForce;
-    bird.y  += bird.vy;
-    bird.angle=Math.max(-0.45,Math.min(bird.vy*0.08,1.3));
-    if(bird.flapTimer>0){bird.flapTimer--;}else{bird.flapping=false;}
-
-    // Spawn pipes
-    if(frame%PIPE_INTERVAL===0) spawnPipe();
-
-    // Update pipes (move + vertical oscillation)
-    for(let i=pipes.length-1;i>=0;i--){
-      const p=pipes[i];
-      p.x-=PIPE_SPEED;
-      if(p.moveAmp>0) p.topH=p.baseTopH+Math.sin(frame*p.moveSpeed+p.movePhase)*p.moveAmp;
-      if(!p.passed&&p.x+PIPE_W<bird.x){p.passed=true;score++;updateDifficulty();}
-      if(p.x+PIPE_W+10<0) pipes.splice(i,1);
-    }
-
-    // Update hazards
-    for(let i=hazards.length-1;i>=0;i--){
-      const h=hazards[i];
-      h.x-=PIPE_SPEED;
-      h.y=h.baseY+Math.sin(frame*h.bobSpeed+h.phase)*h.bobAmp;
-      if(h.x+h.r<0) hazards.splice(i,1);
-    }
-
-    // Collision — pipes
-    const hitPipe=pipes.some(p=>collides(p));
-    // Collision — meteors (circle vs circle)
-    const br=18;
-    const hitMeteor=hazards.some(h=>{
-      const dx=bird.x-h.x, dy=bird.y-h.y;
-      return Math.sqrt(dx*dx+dy*dy)<br+h.r-3;
-    });
-    const dead=bird.y+28>=H-80||bird.y-28<=0||hitPipe||hitMeteor;
-    if(dead){
-      pipes.forEach(drawFork);
-      hazards.forEach(drawMeteor);
-      drawGround();drawBird();
-      endGame();cancelAnimationFrame(raf);return;
-    }
-  }
-  pipes.forEach(drawFork);
-  hazards.forEach(drawMeteor);
-  drawGround(); drawBird(); drawScorePanel(); drawWindWarning();
-  raf=requestAnimationFrame(loop);
-}
-
-// ---- SHARE ----
-function buildShareText(){
-  const rows=globalLB.length?globalLB:localLB;
-  const rank=rows.findIndex(r=>r.name===playerName)+1;
-  const totalPlayers=rows.length;
-  const rankText = rank>0 ? `#${rank} / ${totalPlayers} players` : 'unranked';
-  const lines = [
-    `🌙 FLAPPY LUNAR`,
-    ``,
-    `👤 ${playerName||'Anonymous'}`,
-    `🎯 Score: ${score}`,
-    `🏆 Best: ${best}`,
-    `📊 Rank: ${rankText}`,
-    ``,
-    `Can you beat me? 🕹️`,
-    `flappy-lunar.web.app`
-  ];
-  return lines.join('\n');
-}
-function doShareX(){
-  window.open('https://x.com/intent/tweet?text='+encodeURIComponent(buildShareText()),'_blank');
+// ---- UI HELPERS ----
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
 }
 function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.style.display='block';
-  setTimeout(()=>t.style.display='none',2200);
+  setTimeout(()=>t.style.display='none',1800);
 }
-
-// ---- PLAYER BAR ----
 function updatePlayerBar(){
   const bar=document.getElementById('player-bar');
   const nm=document.getElementById('player-name-display');
   if(playerName){ nm.textContent=playerName; bar.style.display='flex'; }
   else bar.style.display='none';
-  // refresh scoreboard whenever player identity changes
   renderLB();
 }
 function openChangeName(){
@@ -773,32 +433,217 @@ function openChangeName(){
     updatePlayerBar(); showToast('NAME SAVED!');
   };
 }
+function askName(cb){
+  if(playerName){ cb(); return; }
+  document.getElementById('name-modal').style.display='flex';
+  document.getElementById('btn-save-name').onclick=()=>{
+    const v=document.getElementById('name-input').value.trim();
+    if(!v) return;
+    playerName=v; localStorage.setItem('fw_name',v);
+    document.getElementById('name-modal').style.display='none';
+    cb();
+  };
+}
+
+// ---- GAME LOGIC ----
+function updateDifficulty(){
+  const stage=Math.floor(score/5);
+  PIPE_SPEED    = Math.min(BASE_PIPE_SPEED + stage*0.14, 4.2);
+  PIPE_GAP      = Math.max(BASE_PIPE_GAP   - stage*7,   145);
+  PIPE_INTERVAL = Math.max(BASE_PIPE_INTERVAL - stage*3, 70);
+  GRAVITY       = Math.min(BASE_GRAVITY + stage*0.009, 0.40);
+}
+function initGame(){
+  bird={x:80,y:H/2-20,vy:0,angle:0,flapping:false,flapTimer:0};
+  pipes=[]; frame=0; groundX=0; cloudX=0; score=0;
+  PIPE_SPEED=BASE_PIPE_SPEED; PIPE_GAP=BASE_PIPE_GAP;
+  PIPE_INTERVAL=BASE_PIPE_INTERVAL; GRAVITY=BASE_GRAVITY;
+  document.getElementById('dead-overlay').style.display='none';
+}
+function startGame(){ gameState='ready'; initGame(); loop(); }
+function doFlap(){
+  if(gameState==='ready'){ gameState='playing'; bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20; }
+  else if(gameState==='playing'){ bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20; }
+}
+function spawnPipe(){
+  const stage=Math.floor(score/5);
+  const minY=90, maxY=H-90-PIPE_GAP-80;
+  const topH=Math.floor(Math.random()*(maxY-minY)+minY);
+  const moves=stage>=4;
+  const moveAmp=moves?Math.min(12+stage*2,40):0;
+  const moveSpeed=moves?(0.014+stage*0.003):0;
+  pipes.push({x:W+10,topH,passed:false,baseTopH:topH,moveAmp,moveSpeed,movePhase:Math.random()*Math.PI*2});
+}
+function collides(p){
+  const br=20,cO=9;
+  if(bird.x+br<p.x-cO||bird.x-br>p.x+PIPE_W+cO) return false;
+  if(bird.y-br<p.topH) return true;
+  if(bird.y+br>p.topH+PIPE_GAP) return true;
+  return false;
+}
+async function endGame(){
+  gameState='dead';
+  const isNew=score>best;
+  if(isNew) best=score;
+  if(playerName){ saveLocalLB(score); await saveFB(playerName,score); }
+  document.getElementById('sc-score').textContent=score;
+  document.getElementById('sc-best').textContent=best;
+  document.getElementById('sc-player').textContent=playerName?'👤 '+playerName:'Anonymous';
+  const rows=globalLB.length?globalLB:localLB;
+  const myRank=rows.findIndex(r=>r.name===playerName)+1;
+  const medals=['🥇','🥈','🥉'];
+  document.getElementById('sc-rank').textContent=myRank>0?(medals[myRank-1]||'#'+myRank)+' / '+rows.length:'—';
+  document.getElementById('new-best-tag').style.display=isNew&&score>0?'block':'none';
+  document.getElementById('dead-overlay').style.display='flex';
+}
+
+// ---- DRAW ----
+function drawBg(){
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#1a1a3e'); grad.addColorStop(0.5,'#3a2a5e'); grad.addColorStop(1,'#5c3a7e');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(255,255,255,0.8)';
+  [[30,40],[80,20],[150,60],[200,25],[260,50],[310,15],[340,70],[50,90],[120,110],[180,80],[240,100],[290,85]]
+    .forEach(([sx,sy])=>{ ctx.beginPath(); ctx.arc(sx+Math.sin(frame*0.01+sx)*1.5,sy,1.2,0,Math.PI*2); ctx.fill(); });
+  const mx=W/2+Math.sin(frame*0.005)*8, my=80;
+  const mg=ctx.createRadialGradient(mx,my,0,mx,my,36);
+  mg.addColorStop(0,'rgba(255,255,220,1)'); mg.addColorStop(0.6,'rgba(255,240,180,0.7)'); mg.addColorStop(1,'rgba(255,220,100,0)');
+  ctx.fillStyle=mg; ctx.beginPath(); ctx.arc(mx,my,36,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,255,220,0.95)'; ctx.beginPath(); ctx.arc(mx,my,22,0,Math.PI*2); ctx.fill();
+}
+function drawGround(){
+  const gy=H-80, gh=80;
+  const pat=(()=>{try{ return IMG_GROUND.complete&&IMG_GROUND.naturalWidth>0?ctx.createPattern(IMG_GROUND,'repeat'):null; }catch(e){return null;}})();
+  if(pat){
+    const tw=Math.round(gh/IMG_GROUND.naturalHeight*IMG_GROUND.naturalWidth)||64;
+    const off=((groundX%tw)+tw)%tw;
+    ctx.save(); ctx.setTransform(1,0,0,1,-off,gy);
+    ctx.fillStyle=pat; ctx.fillRect(0,0,W+tw,gh); ctx.restore();
+  } else if(IMG_GROUND.complete&&IMG_GROUND.naturalWidth>0){
+    const sc=gh/IMG_GROUND.naturalHeight, sw=IMG_GROUND.naturalWidth*sc;
+    const off=((groundX%sw)+sw)%sw;
+    for(let x=-off;x<W+sw;x+=sw) ctx.drawImage(IMG_GROUND,x,gy,sw,gh);
+  } else {
+    ctx.fillStyle='#5d8a3c'; ctx.fillRect(0,gy,W,gh);
+  }
+}
+function drawBird(){
+  const img=bird.flapping?IMG_FLAP:IMG_NORMAL;
+  ctx.save();
+  ctx.translate(bird.x,bird.y);
+  ctx.rotate(bird.angle);
+  const bw=48,bh=48;
+  if(img.complete&&img.naturalWidth>0) ctx.drawImage(img,-bw/2,-bh/2,bw,bh);
+  else { ctx.fillStyle='#ffdd44'; ctx.beginPath(); ctx.ellipse(0,0,bw/2,bh/2,0,0,Math.PI*2); ctx.fill(); }
+  ctx.restore();
+}
+function drawFork(p){
+  const fw=PIPE_W, cx=p.x+fw/2;
+  if(IMG_FORK.complete&&IMG_FORK.naturalWidth>0){
+    const sc=fw/IMG_FORK.naturalWidth, fh=IMG_FORK.naturalHeight*sc;
+    ctx.save(); ctx.translate(cx,p.topH); ctx.scale(1,-1);
+    ctx.drawImage(IMG_FORK,-fw/2,0,fw,fh); ctx.restore();
+    const ht=p.topH-fh;
+    if(ht>0){ ctx.fillStyle='#f5d020'; ctx.fillRect(cx-fw*0.28,0,fw*0.56,ht); }
+    const botY=p.topH+PIPE_GAP;
+    ctx.drawImage(IMG_FORK,cx-fw/2,botY,fw,fh);
+    const hb=botY+fh;
+    if(hb<H-80){ ctx.fillStyle='#f5d020'; ctx.fillRect(cx-fw*0.28,hb,fw*0.56,H-80-hb); }
+  } else {
+    ctx.fillStyle='#f5d020';
+    ctx.fillRect(p.x+(fw-fw*0.56)/2,0,fw*0.56,p.topH);
+    ctx.fillRect(p.x+(fw-fw*0.56)/2,p.topH+PIPE_GAP,fw*0.56,H-80-p.topH-PIPE_GAP);
+  }
+}
+function drawScorePanel(){
+  ctx.fillStyle='rgba(0,0,0,0.38)'; ctx.fillRect(W/2-40,10,80,36);
+  ctx.fillStyle='#fff700'; ctx.font='20px "Press Start 2P"'; ctx.textAlign='center';
+  ctx.fillText(score,W/2,36); ctx.textAlign='left';
+  const stage=Math.floor(score/5);
+  if(stage>0){
+    ctx.font='7px "Press Start 2P"';
+    ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(W-44,10,36,16);
+    ctx.fillStyle=stage>=6?'#ff4444':stage>=3?'#ff9900':'#aaffaa';
+    ctx.textAlign='center'; ctx.fillText('LV.'+stage,W-26,22); ctx.textAlign='left';
+  }
+}
+function drawReadyOverlay(){
+  ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,0,W,H);
+  const pulse=0.85+0.15*Math.sin(frame*0.08);
+  ctx.save(); ctx.globalAlpha=pulse;
+  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(W/2-95,H/2-28,190,52);
+  ctx.strokeStyle='#fff700'; ctx.lineWidth=2; ctx.strokeRect(W/2-95,H/2-28,190,52);
+  ctx.fillStyle='#fff700'; ctx.font='10px "Press Start 2P"'; ctx.textAlign='center';
+  ctx.fillText('TAP TO START!',W/2,H/2+8); ctx.restore(); ctx.textAlign='left';
+}
+
+// ---- LOOP ----
+function loop(){
+  ctx.clearRect(0,0,W,H); drawBg();
+  if(gameState==='ready'){
+    frame++;
+    bird.y=H/2-20+Math.sin(frame*0.05)*6; bird.angle=0;
+    pipes.forEach(drawFork);
+    drawGround(); drawBird(); drawReadyOverlay();
+    raf=requestAnimationFrame(loop); return;
+  }
+  if(gameState==='playing'){
+    frame++; cloudX+=PIPE_SPEED; groundX+=PIPE_SPEED;
+    bird.vy+=GRAVITY; bird.y+=bird.vy;
+    bird.angle=Math.max(-0.45,Math.min(bird.vy*0.08,1.3));
+    if(bird.flapTimer>0){bird.flapTimer--;}else{bird.flapping=false;}
+    if(frame%PIPE_INTERVAL===0) spawnPipe();
+    for(let i=pipes.length-1;i>=0;i--){
+      const p=pipes[i];
+      p.x-=PIPE_SPEED;
+      if(p.moveAmp>0) p.topH=p.baseTopH+Math.sin(frame*p.moveSpeed+p.movePhase)*p.moveAmp;
+      if(!p.passed&&p.x+PIPE_W<bird.x){p.passed=true;score++;updateDifficulty();}
+      if(p.x+PIPE_W+10<0) pipes.splice(i,1);
+    }
+    const dead=bird.y+28>=H-80||bird.y-28<=0||pipes.some(p=>collides(p));
+    if(dead){
+      pipes.forEach(drawFork); drawGround(); drawBird();
+      endGame(); cancelAnimationFrame(raf); return;
+    }
+  }
+  pipes.forEach(drawFork); drawGround(); drawBird(); drawScorePanel();
+  raf=requestAnimationFrame(loop);
+}
+
+// ---- SHARE ----
+function buildShareText(){
+  const rows=globalLB.length?globalLB:localLB;
+  const rank=rows.findIndex(r=>r.name===playerName)+1;
+  const total=rows.length;
+  return [
+    '🌙 FLAPPY LUNAR','',
+    '👤 '+(playerName||'Anonymous'),
+    '🎯 Score: '+score,
+    '🏆 Best: '+best,
+    '📊 Rank: '+(rank>0?'#'+rank+' / '+total+' players':'unranked'),
+    '','Can you beat me? 🕹️','flappy-lunar.web.app'
+  ].join('\n');
+}
+function doShareX(){ window.open('https://x.com/intent/tweet?text='+encodeURIComponent(buildShareText()),'_blank'); }
 
 // ---- EVENTS ----
-document.getElementById('btn-play').onclick = ()=>askName(()=>{updatePlayerBar();showScreen('game-screen');gameState='playing';initGame();loop();});
-document.getElementById('btn-change-name').onclick = openChangeName;
-
-// Universal input — pointerdown covers mouse + touch + stylus on all devices
-canvas.addEventListener('pointerdown', e=>{ e.preventDefault(); doFlap(); }, {passive:false});
-// Fallback for older browsers
-canvas.addEventListener('click', doFlap);
+document.getElementById('btn-play').onclick=()=>askName(()=>{updatePlayerBar();showScreen('game-screen');gameState='playing';initGame();loop();});
+document.getElementById('btn-change-name').onclick=openChangeName;
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();doFlap();},{passive:false});
 canvas.addEventListener('touchstart',e=>{e.preventDefault();doFlap();},{passive:false});
-
-// Space / Enter / ArrowUp for PC
 document.addEventListener('keydown',e=>{
   if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW'){e.preventDefault();doFlap();}
 });
-
-document.getElementById('btn-restart').onclick = ()=>{document.getElementById('dead-overlay').style.display='none';startGame();};
-document.getElementById('btn-share-x').onclick = doShareX;
-document.getElementById('btn-home-from-dead').onclick = ()=>{
+document.getElementById('btn-restart').onclick=()=>{ document.getElementById('dead-overlay').style.display='none'; startGame(); };
+document.getElementById('btn-share-x').onclick=doShareX;
+document.getElementById('btn-home-from-dead').onclick=()=>{
   cancelAnimationFrame(raf); gameState='idle';
   showScreen('home'); updatePlayerBar();
 };
 
 // ---- INIT ----
 updatePlayerBar();
-subscribeGlobal(); // single realtime listener — no need for loadFB separately
+subscribeGlobal();
 </script>
 </body>
 </html>
