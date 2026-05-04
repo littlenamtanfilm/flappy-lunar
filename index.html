@@ -6,41 +6,55 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:100%;min-height:100vh;background:#1a1a2e;display:flex;justify-content:center;align-items:center;font-family:'Press Start 2P',monospace;image-rendering:pixelated;overflow:hidden;}
+html,body{
+  width:100%;height:100%;
+  background:#1a1a2e;
+  display:flex;justify-content:center;align-items:center;
+  font-family:'Press Start 2P',monospace;
+  image-rendering:pixelated;
+  overflow:hidden;
+  position:fixed; /* prevent iOS bounce */
+}
 
-/* RESPONSIVE WRAPPER — scales the 360px game to fit any screen, centred */
+/* SCALE WRAP — centres the 360px game, scales to fill screen */
 #scale-wrap{
   width:360px;
   flex-shrink:0;
-  transform-origin:center center;
+  transform-origin:top center;
   position:relative;
 }
 
 #root{width:360px;position:relative;overflow:hidden;}
-.screen{display:none;flex-direction:column;align-items:center;min-height:100vh;}
+.screen{display:none;flex-direction:column;align-items:center;}
 .screen.active{display:flex;}
 
-#home{background:#5c94fc;position:relative;overflow:hidden;min-height:100vh;}
+#home{
+  background:#5c94fc;
+  position:relative;
+  overflow:hidden;
+  width:360px;
+}
 .sky-layer{position:absolute;inset:0;background:#5c94fc;}
-.ground-strip{position:absolute;bottom:0;left:-10px;right:-10px;height:80px;background:url('https://i.ibb.co/SD41NRq1/Lunar-flappy-floorbig.png') repeat-x center/auto 80px;image-rendering:auto;}
+.ground-strip{
+  position:absolute;bottom:0;left:-10px;right:-10px;height:80px;
+  background:url('https://i.ibb.co/SD41NRq1/Lunar-flappy-floorbig.png') repeat-x center/auto 80px;
+  image-rendering:auto;
+}
 
-.title-wrap{position:relative;z-index:10;margin-top:32px;text-align:center;}
+.title-wrap{position:relative;z-index:10;text-align:center;}
 .title-line1{color:#fff;font-size:18px;display:block;text-shadow:3px 3px 0 #000;}
 .title-line2{color:#f7c75a;font-size:13px;display:block;margin-top:6px;text-shadow:2px 2px 0 #7a5a00;}
 
-.hero-panda{position:relative;z-index:10;width:100px;height:100px;margin-top:10px;animation:float 1.4s ease-in-out infinite;image-rendering:auto;}
+.hero-panda{position:relative;z-index:10;width:100px;height:100px;animation:float 1.4s ease-in-out infinite;image-rendering:auto;}
 @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-12px);}}
 
 /* SCOREBOARD */
-.scoreboard{position:relative;z-index:10;margin-top:12px;background:#e8a800;border:4px solid #7a5400;box-shadow:4px 4px 0 #7a5400;padding:10px 16px;color:#fff;font-size:9px;text-shadow:1px 1px 0 #7a5400;text-align:center;width:310px;}
+.scoreboard{position:relative;z-index:10;background:#e8a800;border:4px solid #7a5400;box-shadow:4px 4px 0 #7a5400;padding:10px 16px;color:#fff;font-size:9px;text-shadow:1px 1px 0 #7a5400;text-align:center;width:310px;}
 .scoreboard-title{color:#fff700;font-size:7px;margin-bottom:8px;text-shadow:1px 1px 0 #7a5400;display:flex;align-items:center;justify-content:center;gap:6px;}
 .fb-dot{width:8px;height:8px;border-radius:50%;background:#4caf50;display:inline-block;animation:pulse 1.5s ease infinite;flex-shrink:0;}
 .fb-dot.offline{background:#f44336;animation:none;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
-
-/* live badge */
 .live-badge{font-size:6px;background:#e83030;color:#fff;padding:2px 5px;border-radius:2px;margin-left:4px;animation:pulse 1s ease infinite;}
-
 .lb-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:2px solid #7a5400;font-size:7px;transition:background 0.3s;}
 .lb-row:first-child{border-top:none;}
 .lb-row.updated{animation:flash-row 0.6s ease;}
@@ -52,13 +66,13 @@ html,body{width:100%;min-height:100vh;background:#1a1a2e;display:flex;justify-co
 .lb-empty{color:rgba(255,255,255,0.7);font-size:7px;padding:8px 0;}
 .lb-loading{color:rgba(255,255,255,0.5);font-size:6px;padding:8px 0;animation:blink 1s step-end infinite;}
 
-.btn-play-wrap{position:relative;z-index:10;margin-top:14px;}
+.btn-play-wrap{position:relative;z-index:10;}
 .btn-play{background:#e83030;color:#fff;border:none;font-family:'Press Start 2P',monospace;font-size:11px;padding:14px 28px;cursor:pointer;box-shadow:0 6px 0 #8a0000,4px 4px 0 #000;text-shadow:1px 1px 0 #8a0000;letter-spacing:1px;}
 .btn-play:active{transform:translateY(4px);box-shadow:0 2px 0 #8a0000,4px 4px 0 #000;}
-.hint-text{position:relative;z-index:10;margin-top:10px;font-size:7px;color:#fff;text-shadow:1px 1px 0 #000;animation:blink 1s step-end infinite;}
+.hint-text{position:relative;z-index:10;font-size:7px;color:#fff;text-shadow:1px 1px 0 #000;animation:blink 1s step-end infinite;}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
 
-.player-bar{position:relative;z-index:10;display:flex;align-items:center;gap:8px;margin-top:10px;background:rgba(0,0,0,0.28);border:2px solid rgba(255,255,255,0.2);border-radius:3px;padding:7px 12px;width:310px;}
+.player-bar{position:relative;z-index:10;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.28);border:2px solid rgba(255,255,255,0.2);border-radius:3px;padding:7px 12px;width:310px;}
 .player-label{font-size:6px;color:rgba(255,255,255,0.6);}
 .player-name{font-size:7px;color:#fff700;text-shadow:1px 1px 0 #7a5a00;flex:1;}
 .btn-change-name{font-family:'Press Start 2P',monospace;font-size:6px;background:#7a5400;color:#fff700;border:none;padding:5px 8px;cursor:pointer;box-shadow:0 3px 0 #3a2000,2px 2px 0 #000;}
@@ -142,6 +156,7 @@ html,body{width:100%;min-height:100vh;background:#1a1a2e;display:flex;justify-co
 
 <div id="home" class="screen active">
   <div class="sky-layer"></div>
+  <!-- clouds -->
   <svg style="position:absolute;top:50px;left:20px;width:72px;height:28px;" viewBox="0 0 36 14">
     <rect x="4" y="8" width="28" height="6" fill="white"/><rect x="8" y="4" width="20" height="6" fill="white"/><rect x="12" y="0" width="12" height="6" fill="white"/>
   </svg>
@@ -152,32 +167,33 @@ html,body{width:100%;min-height:100vh;background:#1a1a2e;display:flex;justify-co
     <rect x="4" y="8" width="28" height="6" fill="white"/><rect x="8" y="4" width="20" height="6" fill="white"/><rect x="12" y="0" width="12" height="6" fill="white"/>
   </svg>
 
-  <div class="title-wrap">
-    <span class="title-line1">FLAPPY LUNAR</span>
-    <span class="title-line2">* TAP TO FLY *</span>
-  </div>
-
-  <img src="https://i.ibb.co/cSkV90ws/lunar-flappy-duck.png" class="hero-panda" crossorigin="anonymous">
-
-  <div class="scoreboard">
-    <div class="scoreboard-title">
-      <span class="fb-dot offline" id="fb-dot"></span>
-      <span id="lb-header">== MY STATS ==</span>
-      <span class="live-badge" id="live-badge" style="display:none">LIVE</span>
+  <!-- content stack — vertically centred inside 560px, above ground 80px -->
+  <div style="position:relative;z-index:10;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:28px;padding-bottom:88px;width:100%;height:100%;">
+    <div class="title-wrap">
+      <span class="title-line1">FLAPPY LUNAR</span>
+      <span class="title-line2">* TAP TO FLY *</span>
     </div>
-    <div id="lb-list"><div class="lb-loading">CONNECTING...</div></div>
+
+    <img src="https://i.ibb.co/cSkV90ws/lunar-flappy-duck.png" class="hero-panda" crossorigin="anonymous">
+
+    <div class="scoreboard">
+      <div class="scoreboard-title">
+        <span class="fb-dot offline" id="fb-dot"></span>
+        <span id="lb-header">== MY STATS ==</span>
+        <span class="live-badge" id="live-badge" style="display:none">LIVE</span>
+      </div>
+      <div id="lb-list"><div class="lb-loading">CONNECTING...</div></div>
+    </div>
+
+    <div class="btn-play-wrap"><button class="btn-play" id="btn-play">PLAY</button></div>
+    <div class="hint-text">- PRESS SPACE OR TAP -</div>
+
+    <div class="player-bar" id="player-bar" style="display:none">
+      <span class="player-label">PLAYER:</span>
+      <span class="player-name" id="player-name-display"></span>
+      <button class="btn-change-name" id="btn-change-name">✏ CHANGE</button>
+    </div>
   </div>
-
-  <div class="btn-play-wrap"><button class="btn-play" id="btn-play">PLAY</button></div>
-  <div class="hint-text">- PRESS SPACE OR TAP -</div>
-
-  <div class="player-bar" id="player-bar" style="display:none">
-    <span class="player-label">PLAYER:</span>
-    <span class="player-name" id="player-name-display"></span>
-    <button class="btn-change-name" id="btn-change-name">✏ CHANGE</button>
-  </div>
-
-  <div style="flex:1;"></div>
 
   <div class="credits">
     made by littlebaecon &nbsp;·&nbsp; <a href="https://x.com/littlebaechu_" target="_blank">@littlebaechu_</a><br>
@@ -200,7 +216,7 @@ html,body{width:100%;min-height:100vh;background:#1a1a2e;display:flex;justify-co
         <div class="sc-header">
           <img src="https://i.ibb.co/tp6kpmyF/lunar-flappy-duck2.png" class="sc-panda" crossorigin="anonymous" id="sc-panda-img">
           <div class="sc-title-col">
-            <div class="sc-game">🐼 FLAPPY LUNAR 🐣</div>
+            <div class="sc-game">🌙 FLAPPY LUNAR</div>
             <div class="sc-player" id="sc-player">—</div>
             <div class="sc-moon-tag">✦ flappy-lunar.web.app ✦</div>
           </div>
@@ -252,15 +268,34 @@ html,body{width:100%;min-height:100vh;background:#1a1a2e;display:flex;justify-co
 
 <script type="module">
 // ---- RESPONSIVE SCALE ----
+const GAME_W = 360;
+const GAME_H = 560; // canvas height
+
 function applyScale(){
-  const wrap = document.getElementById('scale-wrap');
   const vw = window.innerWidth;
-  // Use visualViewport on mobile to account for browser chrome
-  const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-  const gameH = 660;
-  const scale = Math.min(vw / 360, vh / gameH, 1.8);
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+
+  // Scale so the 360px game fills the screen — no max cap on PC
+  const scale = Math.min(vw / GAME_W, vh / GAME_H);
+
+  const wrap = document.getElementById('scale-wrap');
   wrap.style.transform = `scale(${scale})`;
+  wrap.style.transformOrigin = 'top center';
+
+  // Centre vertically — account for scaled height
+  const scaledH = GAME_H * scale;
+  const topOffset = Math.max(0, (vh - scaledH) / 2);
+  wrap.style.marginTop = topOffset + 'px';
+
+  // Resize home screen height to match canvas height so nothing spills
+  const home = document.getElementById('home');
+  home.style.height = GAME_H + 'px';
+
+  // Resize canvas
+  canvas.width  = GAME_W;
+  canvas.height = GAME_H;
 }
+
 applyScale();
 window.addEventListener('resize', applyScale);
 if(window.visualViewport) window.visualViewport.addEventListener('resize', applyScale);
@@ -343,12 +378,12 @@ let globalLB   = [];
 let gameState  = 'idle', score = 0, best = 0, raf;
 
 const W=360, H=560;
-// Tighter, snappier physics
-const BASE_GRAVITY=0.32, BASE_FLAP_V=-7.2, BASE_PIPE_GAP=200, BASE_PIPE_W=64, BASE_PIPE_SPEED=2.6, BASE_PIPE_INTERVAL=95;
+// ผ่อนคลายลง — ช้าลง ช่องกว้างขึ้น
+const BASE_GRAVITY=0.26, BASE_FLAP_V=-6.4, BASE_PIPE_GAP=225, BASE_PIPE_W=64, BASE_PIPE_SPEED=1.9, BASE_PIPE_INTERVAL=115;
 let GRAVITY=BASE_GRAVITY, FLAP_V=BASE_FLAP_V, PIPE_GAP=BASE_PIPE_GAP, PIPE_W=BASE_PIPE_W, PIPE_SPEED=BASE_PIPE_SPEED, PIPE_INTERVAL=BASE_PIPE_INTERVAL;
 let bird, pipes, hazards, frame, groundX, cloudX;
 // Wind state
-let windForce=0, windTimer=0, windWarning=0;
+let windForce=0, windTimer=300, windWarning=0;
 
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
@@ -432,10 +467,10 @@ function askName(cb){
 // ---- GAME ----
 function updateDifficulty(){
   const stage = Math.floor(score / 5);
-  PIPE_SPEED    = Math.min(BASE_PIPE_SPEED + stage * 0.22, 5.8);
-  PIPE_GAP      = Math.max(BASE_PIPE_GAP   - stage * 9,   118);
-  PIPE_INTERVAL = Math.max(BASE_PIPE_INTERVAL - stage * 4, 55);
-  GRAVITY       = Math.min(BASE_GRAVITY + stage * 0.013, 0.50);
+  PIPE_SPEED    = Math.min(BASE_PIPE_SPEED + stage * 0.14, 4.2);
+  PIPE_GAP      = Math.max(BASE_PIPE_GAP   - stage * 7,   145);
+  PIPE_INTERVAL = Math.max(BASE_PIPE_INTERVAL - stage * 3, 70);
+  GRAVITY       = Math.min(BASE_GRAVITY + stage * 0.009, 0.40);
 }
 
 function initGame(){
@@ -448,7 +483,11 @@ function initGame(){
   document.getElementById('dead-overlay').style.display='none';
 }
 
-function startGame(){ gameState='playing'; initGame(); loop(); }
+function startGame(){
+  gameState='ready';
+  initGame();
+  loop();
+}
 
 async function endGame(){
   gameState='dead';
@@ -477,21 +516,26 @@ async function endGame(){
 }
 
 function doFlap(){
-  if(gameState==='playing'){ bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20; }
+  if(gameState==='ready'){
+    gameState='playing';
+    bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20;
+  } else if(gameState==='playing'){
+    bird.vy=FLAP_V; bird.flapping=true; bird.flapTimer=20;
+  }
 }
 
 function spawnPipe(){
   const stage = Math.floor(score/5);
   const minY=90, maxY=H-90-PIPE_GAP-80;
   const topH = Math.floor(Math.random()*(maxY-minY)+minY);
-  // Moving pipes start at stage 3 (score 15)
-  const moves = stage >= 3;
-  const moveAmp  = moves ? Math.min(18 + stage*3, 55) : 0;
-  const moveSpeed= moves ? (0.018 + stage*0.004) : 0;
+  // Moving pipes start at stage 4 (score 20)
+  const moves = stage >= 4;
+  const moveAmp  = moves ? Math.min(12 + stage*2, 40) : 0;
+  const moveSpeed= moves ? (0.014 + stage*0.003) : 0;
   pipes.push({x:W+10, topH, passed:false, baseTopH:topH, moveAmp, moveSpeed, movePhase:Math.random()*Math.PI*2});
 
-  // Spawn meteor hazard inside gap starting stage 2 (score 10), ~40% chance
-  if(stage >= 2 && Math.random() < 0.40){
+  // Meteor: เริ่ม stage 4 (score 20), โอกาส 25%
+  if(stage >= 4 && Math.random() < 0.25){
     spawnHazard(topH + PIPE_GAP/2, W+10+PIPE_W/2);
   }
 }
@@ -659,23 +703,53 @@ function collides(p){
   return false;
 }
 
+function drawReadyOverlay(){
+  // dim
+  ctx.fillStyle='rgba(0,0,0,0.32)';
+  ctx.fillRect(0,0,W,H);
+  // pulsing box
+  const pulse = 0.85 + 0.15*Math.sin(frame*0.08);
+  ctx.save();
+  ctx.globalAlpha=pulse;
+  ctx.fillStyle='rgba(0,0,0,0.55)';
+  ctx.fillRect(W/2-90,H/2-28,180,52);
+  ctx.strokeStyle='#fff700';
+  ctx.lineWidth=2;
+  ctx.strokeRect(W/2-90,H/2-28,180,52);
+  ctx.fillStyle='#fff700';
+  ctx.font='10px "Press Start 2P"';
+  ctx.textAlign='center';
+  ctx.fillText('TAP TO START!',W/2,H/2+8);
+  ctx.restore();
+  ctx.textAlign='left';
+}
+
 function loop(){
   ctx.clearRect(0,0,W,H); drawBg();
+
+  if(gameState==='ready'){
+    frame++;
+    // bird hovers gently in place
+    bird.y = H/2-20 + Math.sin(frame*0.05)*6;
+    bird.angle=0;
+    drawFork && pipes.forEach(drawFork);
+    drawGround(); drawBird(); drawReadyOverlay();
+    raf=requestAnimationFrame(loop);
+    return;
+  }
   if(gameState==='playing'){
     frame++; cloudX+=PIPE_SPEED; groundX+=PIPE_SPEED;
 
-    // Wind system — triggers every 8-12s starting stage 2
+    // Wind system — triggers ตั้งแต่ stage 3 (score 15)
     const stage=Math.floor(score/5);
-    if(stage>=2){
+    if(stage>=3){
       windTimer--;
       if(windWarning>0) windWarning--;
       if(windTimer<=0){
-        // alternate or random direction
-        windForce=(Math.random()<0.5?1:-1)*(0.10+stage*0.012);
-        windTimer=180+Math.floor(Math.random()*120); // 3-5s active
+        windForce=(Math.random()<0.5?1:-1)*(0.07+stage*0.008);
+        windTimer=220+Math.floor(Math.random()*120);
         windWarning=40;
-        // gust only lasts ~1.5s then fades
-        setTimeout(()=>{ windForce=0; },1500+Math.random()*1000);
+        setTimeout(()=>{ windForce=0; },1200+Math.random()*800);
       }
     }
 
@@ -734,7 +808,7 @@ function buildShareText(){
   const totalPlayers=rows.length;
   const rankText = rank>0 ? `#${rank} / ${totalPlayers} players` : 'unranked';
   const lines = [
-    `🐼 FLAPPY LUNAR 🐣`,
+    `🌙 FLAPPY LUNAR`,
     ``,
     `👤 ${playerName||'Anonymous'}`,
     `🎯 Score: ${score}`,
@@ -777,7 +851,7 @@ function openChangeName(){
 }
 
 // ---- EVENTS ----
-document.getElementById('btn-play').onclick = ()=>askName(()=>{updatePlayerBar();showScreen('game-screen');startGame();});
+document.getElementById('btn-play').onclick = ()=>askName(()=>{updatePlayerBar();showScreen('game-screen');gameState='playing';initGame();loop();});
 document.getElementById('btn-change-name').onclick = openChangeName;
 
 // Universal input — pointerdown covers mouse + touch + stylus on all devices
